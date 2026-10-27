@@ -38,7 +38,7 @@
 <body>
 <main>
   <h1>to<span>md</span></h1>
-  <p class="sub">Paste a page URL, get it back as Markdown. Supported for now: Nim forum threads (forum.nim-lang.org).</p>
+  <p class="sub">Paste a page URL, get it back as Markdown. Supported for now: Nim forum threads (forum.nim-lang.org) and Google Scholar profiles (scholar.google.com/citations?user=…).</p>
   <form id="f">
     <input id="u" placeholder="https://forum.nim-lang.org/t/12345" autocomplete="off" required>
     <button id="go">Convert</button>
@@ -59,7 +59,7 @@ $("f").addEventListener("submit", async e => {
   const url = $("u").value.trim();
   if (!url) return;
   $("go").disabled = true; $("copy").disabled = true; $("out").value = "";
-  status("Fetching thread…");
+  status("Fetching…");
   const t0 = performance.now();
   try {
     const r = await fetch("md?url=" + encodeURIComponent(url));
@@ -67,8 +67,8 @@ $("f").addEventListener("submit", async e => {
     if (!r.ok) throw new Error(text || r.status);
     $("out").value = text;
     $("copy").disabled = false;
-    const posts = +((text.match(/^posts: (\d+)$/m) || [])[1] || 0);
-    status(`${posts} posts · ${(text.length / 1024).toFixed(1)} KB · ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+    const m = text.match(/^(posts|articles): (\d+)$/m);
+    status(`${m ? m[2] + " " + m[1] + " · " : ""}${(text.length / 1024).toFixed(1)} KB · ${((performance.now() - t0) / 1000).toFixed(1)} s`);
     try { history.replaceState(null, "", "?url=" + encodeURIComponent(url)); } catch {}
   } catch (err) {
     status(String(err.message || err), true);
