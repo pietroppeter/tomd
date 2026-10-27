@@ -33,25 +33,47 @@ it does not go through `/cors/`:
 - `/post.rst?id=<post>`: raw source of the latest revision (RST with Markdown
   support), used for post bodies.
 
-Output: YAML front matter for the thread, then the posts separated by `---`.
-Each post starts with a byline; bodies are left exactly as typed (so they may
-contain RST, or headings of their own).
+Output: YAML front matter for the thread, then each post as a YAML block
+opened by `---` and closed by `...` (YAML's end-of-document marker, also
+accepted by pandoc), followed by its body. Bodies are left exactly as typed (so
+they may contain RST, headings, or `---` of their own); to split posts, match a
+`---` line followed by `post:`. Closing with `...` rather than `---` keeps
+Markdown renderers from turning the last YAML line into a heading.
 
 ```markdown
 ---
 title: "Some thread"
 source: https://forum.nim-lang.org/t/12345
 category: "Default"
+author: "alice"
+created_at: 2026-09-23T17:18:00Z
+updated_at: 2026-09-24T08:02:00Z    # latest post or edit
 posts: 2
 ---
 
-**alice** · 2026-09-23 17:18 UTC · edited 1× · [#1](https://forum.nim-lang.org/t/12345#100)
+---
+post: 1
+id: 100
+url: https://forum.nim-lang.org/t/12345#100
+author: "alice"
+created_at: 2026-09-23T17:18:00Z
+updated_at: 2026-09-24T08:02:00Z    # only if edited
+edits: 1
+likes: ["bob"]
+...
 
 First post.
 
 ---
-
-**bob** · 2026-09-23 18:02 UTC · [#2](https://forum.nim-lang.org/t/12345#101) · ↪ replying to alice ([#1](https://forum.nim-lang.org/t/12345#100))
+post: 2
+id: 101
+url: https://forum.nim-lang.org/t/12345#101
+author: "bob"
+created_at: 2026-09-23T18:02:00Z
+reply_to: 1                         # post number; reply_to_id is the post id
+reply_to_id: 100
+reply_to_author: "alice"
+...
 
 Reply.
 ```
