@@ -67,7 +67,7 @@ $("f").addEventListener("submit", async e => {
     if (!r.ok) throw new Error(text || r.status);
     $("out").value = text;
     $("copy").disabled = false;
-    const posts = (text.match(/^## #/gm) || []).length;
+    const posts = +((text.match(/^posts: (\d+)$/m) || [])[1] || 0);
     status(`${posts} posts · ${(text.length / 1024).toFixed(1)} KB · ${((performance.now() - t0) / 1000).toFixed(1)} s`);
     try { history.replaceState(null, "", "?url=" + encodeURIComponent(url)); } catch {}
   } catch (err) {
