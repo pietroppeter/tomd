@@ -44,7 +44,7 @@ jobs:
   scholar:
     runs-on: ubuntu-latest
     env:
-      SCHOLAR_ID: 4bahYMkAAAAJ
+      SCHOLAR_ID: tDf0VkUAAAAJ   # Brent Pedersen
     steps:
       - uses: actions/checkout@v4
       - uses: jiro4989/setup-nim-action@v2
