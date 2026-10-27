@@ -25,14 +25,15 @@ jobs:
         run: |
           ./bin/nimforum "https://forum.nim-lang.org/t/$ID" -o:thread.md
           head -40 thread.md
-          grep -q '^## #1 ' thread.md
+          grep -q '^posts: [1-9]' thread.md
       - name: Server routes work against the real forum
         run: |
           ./bin/tomd & sleep 2
-          curl -fsS "localhost:8000/https://forum.nim-lang.org/t/$ID" | grep -q '^## #1 '
-          curl -fsS "localhost:8000/forum.nim-lang.org/t/$ID" | grep -q '^## #1 '
+          curl -fsS "localhost:8000/https://forum.nim-lang.org/t/$ID" | grep -q '^posts: [1-9]'
+          curl -fsS "localhost:8000/forum.nim-lang.org/t/$ID" | grep -q '^posts: [1-9]'
           curl -fsS -D - -o /dev/null "localhost:8000/cors/https://forum.nim-lang.org/threads.json?count=1" | grep -qi 'access-control-allow-origin: \*'
           test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8000/https://example.com/)" = 400
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8000/forum.nim-lang.org/t/999999999)" = 404
       - uses: actions/upload-artifact@v4
         if: always()
         with:

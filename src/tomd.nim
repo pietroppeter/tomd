@@ -94,6 +94,7 @@ proc passthrough(target: Uri): Future[(string, string)] {.async, gcsafe.} =
   let c = newAsyncHttpClient(userAgent = UserAgent)
   try:
     let r = await c.get($target)
+    if r.code == Http404: raise newException(NotFoundError, $target & " -> " & $r.code)
     if not r.code.is2xx: raise newException(IOError, $target & " -> " & $r.code)
     let body = await r.body
     if body.len > MaxPassthrough: raise newException(IOError, "response too large")
@@ -147,6 +148,8 @@ proc handle(req: Request) {.async, gcsafe.} =
       await req.respond(Http200, md, hdrs("text/markdown; charset=utf-8"))
   except ValueError as e:
     await fail(Http400, e.msg)
+  except NotFoundError:
+    await fail(Http404, "not found: " & $target)
   except ResourceExhaustedError as e:
     await fail(Http503, e.msg)
   except CatchableError as e:

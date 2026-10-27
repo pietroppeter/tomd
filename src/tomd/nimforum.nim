@@ -18,12 +18,17 @@ const
   DefaultBase* = "https://" & Host
   UserAgent* = "tomd/0.1 (+https://github.com/pietroppeter/tomd)"
 
+type
+  NotFoundError* = object of IOError  ## upstream answered 404
+
 type Getter* = proc (url: string): Future[string] {.gcsafe.}
 
 proc httpGet*(url: string): Future[string] {.async, gcsafe.} =
   let c = newAsyncHttpClient(userAgent = UserAgent)
   try:
     let r = await c.get(url)
+    if r.code == Http404:
+      raise newException(NotFoundError, url & " -> " & $r.code)
     if not r.code.is2xx:
       raise newException(IOError, url & " -> " & $r.code)
     result = await r.body
@@ -85,36 +90,62 @@ proc fetchRaw*(get: Getter, base: string, ids: seq[int]):
     for j, id in batch: result[id] = bodies[j]
     i += 8
 
+proc isoTs(ts: int64): string =
+  fromUnix(ts).utc.format("yyyy-MM-dd'T'HH:mm:ss'Z'")
+
 proc toMarkdown*(base: string, thread: JsonNode, posts: seq[JsonNode],
                  raw: Table[int, string]): string =
+  ## YAML front matter for the thread (closed by `---`), then each post as a
+  ## YAML block opened by `---` and closed by `...` (YAML's end-of-document
+  ## marker, also accepted by pandoc), followed by its body. Closing post
+  ## blocks with `...` keeps renderers from turning the last YAML line into a
+  ## setext heading. Bodies are left as typed (RST, headings, even `---`).
   let tid = thread["id"].getInt
+  let url = base & "/t/" & $tid
+  var num: Table[int, int]          # post id -> position in thread (1-based)
+  var updated = thread{"activity"}.getBiggestInt  # latest post or edit
+  for n, p in posts:
+    num[p["id"].getInt] = n + 1
+    updated = max(updated, p["info"]["creation"].getBiggestInt)
+    for h in p{"history"}.getElems: updated = max(updated, h{"creation"}.getBiggestInt)
   var o: seq[string]
-  o.add "# " & thread["topic"].getStr
-  o.add ""
-  o.add "Source: $1/t/$2 · category: $3 · $4 posts" % [base, $tid,
-        thread{"category", "name"}.getStr("?"), $posts.len]
-  o.add ""
+  o.add "---"
+  o.add "title: " & escapeJson(thread["topic"].getStr)
+  o.add "source: " & url
+  o.add "category: " & escapeJson(thread{"category", "name"}.getStr("?"))
+  o.add "author: " & escapeJson(thread{"author", "name"}.getStr("?"))
+  o.add "created_at: " & isoTs(thread{"creation"}.getBiggestInt)
+  o.add "updated_at: " & isoTs(updated)
+  o.add "posts: " & $posts.len
+  o.add "---"
   for n, p in posts:
     let id = p["id"].getInt
-    var head = "## #$1 — $2 · $3" % [$(n + 1), p["author"]["name"].getStr,
-                                    fmtTs(p["info"]["creation"].getBiggestInt)]
-    let edits = p{"history"}.getElems.len
-    if edits > 0: head.add " (edited $1×)" % $edits
-    o.add head
-    o.add "<!-- post $1: $2/t/$3#$1 -->" % [$id, base, $tid]
     o.add ""
+    o.add "---"
+    o.add "post: " & $(n + 1)
+    o.add "id: " & $id
+    o.add "url: $1#$2" % [url, $id]
+    o.add "author: " & escapeJson(p["author"]["name"].getStr)
+    o.add "created_at: " & isoTs(p["info"]["creation"].getBiggestInt)
+    let history = p{"history"}.getElems
+    if history.len > 0:
+      var last = 0'i64
+      for h in history: last = max(last, h{"creation"}.getBiggestInt)
+      o.add "updated_at: " & isoTs(last)
+      o.add "edits: " & $history.len
     let rt = unopt(p{"replyingTo"})
     if rt != nil:
+      let rid = rt{"postId"}.getInt
+      o.add "reply_to: " & (if rid in num: $num[rid] else: "null")
+      o.add "reply_to_id: " & $rid
       let who = unopt(rt{"author"})
-      o.add "> ↪ replying to $1 (post $2)" % [
-        (if who != nil: who["name"].getStr else: "?"), $rt{"postId"}.getInt]
-      o.add ""
-    o.add (if id in raw: raw[id] else: p["info"]["content"].getStr).strip
+      if who != nil: o.add "reply_to_author: " & escapeJson(who["name"].getStr)
+    let likes = p{"likes"}.getElems.mapIt(escapeJson(it["name"].getStr))
+    if likes.len > 0: o.add "likes: [" & likes.join(", ") & "]"
+    o.add "..."
     o.add ""
-    let likes = p{"likes"}.getElems.mapIt(it["name"].getStr)
-    if likes.len > 0:
-      o.add "*❤ $1: $2*" % [$likes.len, likes.join(", ")]
-      o.add ""
+    o.add (if id in raw: raw[id] else: p["info"]["content"].getStr).strip
+  o.add ""
   o.join("\n")
 
 proc threadToMarkdown*(get: Getter, base: string, id: int,
