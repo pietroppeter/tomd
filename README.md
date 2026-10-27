@@ -69,3 +69,14 @@ view), and a 5 MB cap on passthrough responses.
 The page and the API share one origin, so the browser never makes a
 cross-origin request. The `Access-Control-Allow-Origin: *` headers are for
 *other* pages (e.g. static sites) calling tomd.
+
+## Why asynchttpserver, not Mummy
+
+tomd mostly waits on other sites: a conversion is several outgoing HTTP calls.
+std `asyncdispatch` handles that on one thread, so the cache, rate limiter and
+in-flight counter are plain globals without locks, and there are no dependencies.
+[Mummy](https://github.com/guzba/mummy) (used by
+[disco-nim-mummy](https://github.com/pietroppeter/disco-nim-mummy)) runs blocking
+handlers on worker threads: each outgoing call would hold a worker, and the shared
+state would need a `Lock`. Worth switching if tomd needs WebSockets, or if
+asynchttpserver misbehaves behind Caddy.
