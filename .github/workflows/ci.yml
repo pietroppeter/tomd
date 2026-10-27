@@ -1,0 +1,50 @@
+name: ci
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * 1"   # weekly: catch nimforum API changes
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: "2.2.x"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build
+        run: |
+          nim c -d:release -d:ssl --hints:off -o:bin/tomd src/tomd.nim
+          nim c -d:release -d:ssl --hints:off -o:bin/nimforum src/tomd/nimforum.nim
+      - name: Pick a live thread
+        run: echo "ID=$(curl -fsS 'https://forum.nim-lang.org/threads.json?count=1' | jq '.threads[0].id')" >> "$GITHUB_ENV"
+      - name: CLI converts a real thread
+        run: |
+          ./bin/nimforum "https://forum.nim-lang.org/t/$ID" -o:thread.md
+          head -40 thread.md
+          grep -q '^## #1 ' thread.md
+      - name: Server routes work against the real forum
+        run: |
+          ./bin/tomd & sleep 2
+          curl -fsS "localhost:8000/https://forum.nim-lang.org/t/$ID" | grep -q '^## #1 '
+          curl -fsS "localhost:8000/forum.nim-lang.org/t/$ID" | grep -q '^## #1 '
+          curl -fsS -D - -o /dev/null "localhost:8000/cors/https://forum.nim-lang.org/threads.json?count=1" | grep -qi 'access-control-allow-origin: \*'
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8000/https://example.com/)" = 400
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: thread-markdown
+          path: thread.md
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Image builds and serves
+        run: |
+          docker build -t tomd .
+          docker run -d -p 8000:8000 --name tomd tomd && sleep 2
+          curl -fsS localhost:8000/healthz

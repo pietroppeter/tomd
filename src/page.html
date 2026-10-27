@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tomd</title>
+<style>
+  :root { --bg:#fbfaf7; --fg:#1d1d1b; --mut:#6b6a66; --acc:#c9a227; --line:#e4e1d8; --card:#fff; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#17171a; --fg:#ecebe6; --mut:#9a9890; --acc:#e3bd3d; --line:#2c2c31; --card:#1f1f23; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+  h1 { font-size: 1.6rem; margin: 0 0 .25rem; letter-spacing: -.01em; }
+  h1 span { color: var(--acc); }
+  p.sub { color: var(--mut); margin: 0 0 1.5rem; }
+  form { display:flex; gap:.5rem; flex-wrap:wrap; }
+  input { flex: 1 1 22rem; padding:.7rem .85rem; font: inherit; color: var(--fg);
+          background: var(--card); border:1px solid var(--line); border-radius:8px; }
+  input:focus { outline: 2px solid var(--acc); outline-offset: 1px; }
+  button { padding:.7rem 1.1rem; font: inherit; font-weight:600; cursor:pointer;
+           border:1px solid var(--acc); border-radius:8px; background: var(--acc); color:#1d1d1b; }
+  button.ghost { background: transparent; color: var(--fg); border-color: var(--line); font-weight:500; }
+  button:disabled { opacity:.5; cursor: default; }
+  .bar { display:flex; justify-content:space-between; align-items:center; margin: 1.75rem 0 .5rem; gap:.5rem; }
+  #status { color: var(--mut); font-size:.92rem; }
+  #status.err { color: #d0473a; }
+  textarea { width:100%; min-height: 55vh; padding: 1rem; resize: vertical;
+             font: 13.5px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+             color: var(--fg); background: var(--card); border:1px solid var(--line); border-radius:8px; }
+  footer { margin-top: 1.5rem; color: var(--mut); font-size: .85rem; }
+  code { font-family: ui-monospace, Menlo, monospace; font-size: .9em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>to<span>md</span></h1>
+  <p class="sub">Paste a page URL, get it back as Markdown. Supported for now: Nim forum threads (forum.nim-lang.org).</p>
+  <form id="f">
+    <input id="u" placeholder="https://forum.nim-lang.org/t/12345" autocomplete="off" required>
+    <button id="go">Convert</button>
+  </form>
+  <div class="bar">
+    <span id="status">&nbsp;</span>
+    <button id="copy" class="ghost" disabled>Copy</button>
+  </div>
+  <textarea id="out" readonly spellcheck="false" placeholder="Markdown appears here"></textarea>
+  <footer>Also works by putting this site's address in front of a URL: <code>/https://forum.nim-lang.org/t/12345</code> (or <code>/md?url=…</code>). Source: <a href="https://github.com/pietroppeter/tomd" style="color:inherit">pietroppeter/tomd</a>.</footer>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const status = (msg, err) => { $("status").textContent = msg; $("status").className = err ? "err" : ""; };
+
+$("f").addEventListener("submit", async e => {
+  e.preventDefault();
+  const url = $("u").value.trim();
+  if (!url) return;
+  $("go").disabled = true; $("copy").disabled = true; $("out").value = "";
+  status("Fetching thread…");
+  const t0 = performance.now();
+  try {
+    const r = await fetch("md?url=" + encodeURIComponent(url));
+    const text = await r.text();
+    if (!r.ok) throw new Error(text || r.status);
+    $("out").value = text;
+    $("copy").disabled = false;
+    const posts = (text.match(/^## #/gm) || []).length;
+    status(`${posts} posts · ${(text.length / 1024).toFixed(1)} KB · ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+    try { history.replaceState(null, "", "?url=" + encodeURIComponent(url)); } catch {}
+  } catch (err) {
+    status(String(err.message || err), true);
+  } finally {
+    $("go").disabled = false;
+  }
+});
+
+$("copy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("out").value); status("Copied to clipboard"); }
+  catch { $("out").select(); status("Selected: press Ctrl/⌘+C to copy"); }
+});
+
+const q = new URLSearchParams(location.search).get("url");
+if (q) { $("u").value = q; $("f").requestSubmit(); }
+</script>
+</body>
+</html>
