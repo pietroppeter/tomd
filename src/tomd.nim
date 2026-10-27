@@ -3,6 +3,7 @@
 ##   GET /<url>             Markdown for <url>; scheme optional, e.g.
 ##                          /https://forum.nim-lang.org/t/12345
 ##                          /forum.nim-lang.org/t/12345
+##                          /scholar.google.com/citations?user=<id>
 ##   GET /md?url=<url>      same, as a query parameter (used by the page)
 ##   GET /cors/<url>        raw passthrough with CORS headers (allowlisted hosts only)
 ##   GET /                  the page: paste a URL, copy the Markdown
@@ -14,7 +15,7 @@
 
 import std/[asyncdispatch, asynchttpserver, httpclient, strutils, tables,
             times, uri, os, sequtils]
-import tomd/nimforum
+import tomd/[nimforum, scholar]
 
 type Converter* = object
   canonical*: proc (u: Uri): string {.nimcall.}   ## raises ValueError if unsupported
@@ -30,6 +31,7 @@ const
 
 let Converters* = {
   nimforum.Host: Converter(canonical: nimforum.canonical, render: nimforum.render),
+  scholar.Host: Converter(canonical: scholar.canonical, render: scholar.render),
 }.toTable
 
 var
@@ -151,6 +153,8 @@ proc handle(req: Request) {.async, gcsafe.} =
   except NotFoundError:
     await fail(Http404, "not found: " & $target)
   except ResourceExhaustedError as e:
+    await fail(Http503, e.msg)
+  except BlockedError as e:
     await fail(Http503, e.msg)
   except CatchableError as e:
     await fail(Http502, "could not fetch " & $target & ": " & e.msg)

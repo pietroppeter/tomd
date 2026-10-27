@@ -1,7 +1,7 @@
 # tomd
 
 Web pages → Markdown, plus a CORS passthrough, for an **allowlist** of sites.
-First (and so far only) site: Nim forum threads. Runs at
+Sites so far: Nim forum threads and Google Scholar profiles. Runs at
 **tomd.pietroppeter.xyz** (deployed with [Disco](https://disco.cloud)).
 
 ## Usage
@@ -11,6 +11,7 @@ Put tomd's address in front of a URL (the scheme is optional):
 ```
 https://tomd.pietroppeter.xyz/https://forum.nim-lang.org/t/12345
 https://tomd.pietroppeter.xyz/forum.nim-lang.org/t/12345
+https://tomd.pietroppeter.xyz/https://scholar.google.com/citations?user=XXXXXXXXXXXX
 ```
 
 | Route | What |
@@ -85,6 +86,21 @@ It works on its own as a CLI too:
 ```sh
 nim c -d:release -d:ssl -o:bin/nimforum src/tomd/nimforum.nim
 ./bin/nimforum https://forum.nim-lang.org/t/12345 -o:thread.md   # --html for rendered bodies
+```
+
+## Google Scholar converter
+
+`src/tomd/scholar.nim` turns a profile page (`/citations?user=<id>`) into YAML
+front matter (name, affiliation, interests, citations / h-index / i10-index)
+and a table of articles, most cited first. Scholar has no API, so it parses the
+page HTML, 100 articles per request, up to 500 articles. Scholar's robots.txt
+allows profile pages, but Scholar often answers server IPs with a CAPTCHA or a
+429: tomd then answers 503 with that reason rather than an empty profile. The
+`scholar` CI job warns instead of failing when that happens to the runner.
+
+```sh
+nim c -d:release -d:ssl -o:bin/scholar src/tomd/scholar.nim
+./bin/scholar 'https://scholar.google.com/citations?user=XXXXXXXXXXXX' -o:profile.md
 ```
 
 ## Run / deploy

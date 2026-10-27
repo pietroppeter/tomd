@@ -34,11 +34,42 @@ jobs:
           curl -fsS -D - -o /dev/null "localhost:8000/cors/https://forum.nim-lang.org/threads.json?count=1" | grep -qi 'access-control-allow-origin: \*'
           test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8000/https://example.com/)" = 400
           test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8000/forum.nim-lang.org/t/999999999)" = 404
+          test "$(curl -s -o /dev/null -w '%{http_code}' 'localhost:8000/scholar.google.com/scholar?q=nim')" = 400
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: thread-markdown
           path: thread.md
+
+  scholar:
+    runs-on: ubuntu-latest
+    env:
+      SCHOLAR_ID: 4bahYMkAAAAJ
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: "2.2.x"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build
+        run: nim c -d:release -d:ssl --hints:off -o:bin/scholar src/tomd/scholar.nim
+      - name: Convert a live profile (Scholar may block CI runners)
+        run: |
+          if ./bin/scholar "https://scholar.google.com/citations?user=$SCHOLAR_ID&hl=en" -o:profile.md 2> err.txt; then
+            head -30 profile.md
+            grep -q '^articles: [1-9]' profile.md
+          elif grep -q 'BlockedError' err.txt; then
+            cat err.txt
+            echo "::warning::Google Scholar blocked this runner, so the live conversion was not checked"
+          else
+            cat err.txt; exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scholar-markdown
+          path: profile.md
+          if-no-files-found: ignore
 
   docker:
     runs-on: ubuntu-latest
