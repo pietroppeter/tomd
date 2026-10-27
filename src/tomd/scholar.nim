@@ -1,8 +1,9 @@
 ## Render a Google Scholar profile as Markdown.
 ##
 ## Scholar has no API, so this parses the profile page
-## (`/citations?user=<id>`), 100 articles per request via `cstart`/`pagesize`.
-## Scholar's robots.txt allows `/citations?user=`. It often answers datacenter
+## (`/citations?user=<id>`): one request, the 100 most cited articles.
+## Scholar's robots.txt allows `/citations?user=` but disallows paging with
+## `cstart=`, so we don't page. It often answers datacenter
 ## IPs with a CAPTCHA page or a 429 instead: that raises `BlockedError`, so the
 ## server says so rather than returning an empty profile.
 ##
@@ -18,8 +19,7 @@ from nimforum import UserAgent, NotFoundError
 const
   Host* = "scholar.google.com"
   DefaultBase* = "https://" & Host
-  PageSize = 100
-  MaxPages = 5      # at most 500 articles, i.e. 5 requests to Scholar
+  PageSize = 100    # the most Scholar shows on one page
 
 type
   BlockedError* = object of IOError  ## Scholar refused us (CAPTCHA, 429)
@@ -166,21 +166,15 @@ proc toMarkdown*(source: string, p: Profile): string =
   o.join("\n")
 
 proc profileToMarkdown*(base, id: string): Future[string] {.async.} =
-  let source = DefaultBase & "/citations?user=" & id
-  var profile: Profile
-  for page in 0 ..< MaxPages:
-    let url = "$1/citations?user=$2&hl=en&cstart=$3&pagesize=$4" %
-              [base, encodeUrl(id), $(page * PageSize), $PageSize]
-    let doc = parseHtml(await fetch(url))
-    if not doc.isProfilePage:
-      raise newException(BlockedError,
-        "Google Scholar did not return a profile page (likely a CAPTCHA); " &
-        "it often blocks server IPs")
-    if page == 0: profile = parseProfile(doc)
-    let arts = parseArticles(doc)
-    profile.articles.add arts
-    if arts.len < PageSize: break
-  result = toMarkdown(source, profile)
+  let url = "$1/citations?user=$2&hl=en&pagesize=$3" % [base, encodeUrl(id), $PageSize]
+  let doc = parseHtml(await fetch(url))
+  if not doc.isProfilePage:
+    raise newException(BlockedError,
+      "Google Scholar did not return a profile page (likely a CAPTCHA); " &
+      "it often blocks server IPs")
+  var profile = parseProfile(doc)
+  profile.articles = parseArticles(doc)
+  result = toMarkdown(DefaultBase & "/citations?user=" & id, profile)
 
 # --- tomd converter interface -------------------------------------------
 
