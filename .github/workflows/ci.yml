@@ -53,6 +53,8 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build
         run: nim c -d:release -d:ssl --hints:off -o:bin/scholar src/tomd/scholar.nim
+      - name: Scholar's robots.txt (for reference)
+        run: curl -sS https://scholar.google.com/robots.txt | head -40 || true
       - name: Convert a live profile (Scholar may block CI runners)
         run: |
           if ./bin/scholar "https://scholar.google.com/citations?user=$SCHOLAR_ID&hl=en" -o:profile.md 2> err.txt; then

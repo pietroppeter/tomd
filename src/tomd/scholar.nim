@@ -57,7 +57,7 @@ proc cls(n: XmlNode): seq[string] =
   if n.kind == xnElement and n.attrs != nil: n.attr("class").splitWhitespace
   else: @[]
 
-proc collect(n: XmlNode, pred: proc (n: XmlNode): bool, acc: var seq[XmlNode]) =
+proc collect(n: XmlNode, pred: proc (n: XmlNode): bool {.gcsafe.}, acc: var seq[XmlNode]) =
   if n.kind != xnElement: return
   if pred(n): acc.add n
   for c in n: collect(c, pred, acc)
