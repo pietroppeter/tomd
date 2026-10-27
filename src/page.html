@@ -24,6 +24,7 @@
            border:1px solid var(--acc); border-radius:8px; background: var(--acc); color:#1d1d1b; }
   button.ghost { background: transparent; color: var(--fg); border-color: var(--line); font-weight:500; }
   button:disabled { opacity:.5; cursor: default; }
+  @media (max-width: 34rem) { form button { flex: 1 1 100%; } }
   .bar { display:flex; justify-content:space-between; align-items:center; margin: 1.75rem 0 .5rem; gap:.5rem; }
   #status { color: var(--mut); font-size:.92rem; }
   #status.err { color: #d0473a; }
