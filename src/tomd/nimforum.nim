@@ -18,12 +18,17 @@ const
   DefaultBase* = "https://" & Host
   UserAgent* = "tomd/0.1 (+https://github.com/pietroppeter/tomd)"
 
+type
+  NotFoundError* = object of IOError  ## upstream answered 404
+
 type Getter* = proc (url: string): Future[string] {.gcsafe.}
 
 proc httpGet*(url: string): Future[string] {.async, gcsafe.} =
   let c = newAsyncHttpClient(userAgent = UserAgent)
   try:
     let r = await c.get(url)
+    if r.code == Http404:
+      raise newException(NotFoundError, url & " -> " & $r.code)
     if not r.code.is2xx:
       raise newException(IOError, url & " -> " & $r.code)
     result = await r.body
@@ -87,28 +92,40 @@ proc fetchRaw*(get: Getter, base: string, ids: seq[int]):
 
 proc toMarkdown*(base: string, thread: JsonNode, posts: seq[JsonNode],
                  raw: Table[int, string]): string =
+  ## YAML front matter for the thread, then one block per post separated by
+  ## `---`. Each post opens with a one-line byline; post bodies are left as
+  ## typed (they may contain their own headings or RST).
   let tid = thread["id"].getInt
+  let url = base & "/t/" & $tid
+  var num: Table[int, int]          # post id -> position in thread (1-based)
+  for n, p in posts: num[p["id"].getInt] = n + 1
   var o: seq[string]
-  o.add "# " & thread["topic"].getStr
-  o.add ""
-  o.add "Source: $1/t/$2 · category: $3 · $4 posts" % [base, $tid,
-        thread{"category", "name"}.getStr("?"), $posts.len]
+  o.add "---"
+  o.add "title: " & escapeJson(thread["topic"].getStr)
+  o.add "source: " & url
+  o.add "category: " & escapeJson(thread{"category", "name"}.getStr("?"))
+  o.add "posts: " & $posts.len
+  o.add "---"
   o.add ""
   for n, p in posts:
     let id = p["id"].getInt
-    var head = "## #$1 — $2 · $3" % [$(n + 1), p["author"]["name"].getStr,
-                                    fmtTs(p["info"]["creation"].getBiggestInt)]
+    if n > 0:
+      o.add "---"
+      o.add ""
+    var head = "**$1** · $2" % [p["author"]["name"].getStr,
+                               fmtTs(p["info"]["creation"].getBiggestInt)]
     let edits = p{"history"}.getElems.len
-    if edits > 0: head.add " (edited $1×)" % $edits
-    o.add head
-    o.add "<!-- post $1: $2/t/$3#$1 -->" % [$id, base, $tid]
-    o.add ""
+    if edits > 0: head.add " · edited $1×" % $edits
+    head.add " · [#$1]($2#$3)" % [$(n + 1), url, $id]
     let rt = unopt(p{"replyingTo"})
     if rt != nil:
       let who = unopt(rt{"author"})
-      o.add "> ↪ replying to $1 (post $2)" % [
-        (if who != nil: who["name"].getStr else: "?"), $rt{"postId"}.getInt]
-      o.add ""
+      let rid = rt{"postId"}.getInt
+      head.add " · ↪ replying to $1 ($2)" % [
+        (if who != nil: who["name"].getStr else: "?"),
+        (if rid in num: "[#$1]($2#$3)" % [$num[rid], url, $rid] else: "post " & $rid)]
+    o.add head
+    o.add ""
     o.add (if id in raw: raw[id] else: p["info"]["content"].getStr).strip
     o.add ""
     let likes = p{"likes"}.getElems.mapIt(it["name"].getStr)

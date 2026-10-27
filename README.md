@@ -33,6 +33,31 @@ it does not go through `/cors/`:
 - `/post.rst?id=<post>`: raw source of the latest revision (RST with Markdown
   support), used for post bodies.
 
+Output: YAML front matter for the thread, then the posts separated by `---`.
+Each post starts with a byline; bodies are left exactly as typed (so they may
+contain RST, or headings of their own).
+
+```markdown
+---
+title: "Some thread"
+source: https://forum.nim-lang.org/t/12345
+category: "Default"
+posts: 2
+---
+
+**alice** · 2026-09-23 17:18 UTC · edited 1× · [#1](https://forum.nim-lang.org/t/12345#100)
+
+First post.
+
+---
+
+**bob** · 2026-09-23 18:02 UTC · [#2](https://forum.nim-lang.org/t/12345#101) · ↪ replying to alice ([#1](https://forum.nim-lang.org/t/12345#100))
+
+Reply.
+```
+
+A thread that does not exist gives a 404.
+
 It works on its own as a CLI too:
 
 ```sh
